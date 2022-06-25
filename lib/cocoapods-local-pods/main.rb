@@ -1,29 +1,52 @@
 
-require_relative 'private_api_hooks'
+LocalPodFile = 'localPodfile'
 
 module Pod
   class Podfile
     module DSL
-      @@enable_local_pod_override = false
-      def self.enable_local_pod_override
-        @@enable_local_pod_override
+
+      class FakePodfile
+        @@dependencies = {}
+
+        def dependencies
+          return @@dependencies
+        end
+
+        def initialize()
+          contents ||= File.open(LocalPodFile, 'r:utf-8', &:read)
+
+          if contents.nil?
+            UI.puts "#{LocalPodFile} not exist or empty"
+            return
+          end
+
+          instance_eval(contents)
+        end
+
+        def pod(name = nil, *requirements)
+          unless name
+            raise StandardError, 'A dependency requires a name.'
+          end
+
+          dependencies[name] = requirements
+        end
       end
 
-      def enable_local_pod_override!
-        @@enable_local_pod_override = true
+      @@localPodfile = FakePodfile.new()
+
+      # ======================
+      # ==== PATCH METHOD ====
+      # ======================
+      swizzled_pod = instance_method(:pod)
+
+      define_method(:pod) do |name, *requirements|
+        if @@localPodfile.dependencies.has_key?(name)
+          swizzled_pod.bind(self).(name, *@@localPodfile.dependencies[name])
+        else
+          swizzled_pod.bind(self).(name, *requirements)
+        end
       end
-    end
-  end
-end
 
-module CocoapodsLocalPods
-  PLUGIN_NAME = 'cocoapods-local-pods'
-
-  Pod::HooksManager.register(PLUGIN_NAME, :pre_install) do |installer_context|
-    if Pod::Podfile::DSL.enable_local_pod_override
-      @@plugin_enabled = true
-    else
-      Pod::UI.warn "#{PLUGIN_NAME} is installed but the enable_local_pod_override! was not found in the Podfile."
     end
   end
 end
