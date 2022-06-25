@@ -1,1 +1,1 @@
-require 'cocoapods-local-pods/command'
+require 'cocoapods-local-pods/main.rb'
